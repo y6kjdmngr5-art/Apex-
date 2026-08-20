@@ -293,6 +293,13 @@ summary::marker{color:var(--accent)}
 #itemSlot{box-shadow:0 0 0 1px rgba(255,255,255,.04),0 12px 34px rgba(0,0,0,.25)}
 #driftArc{filter:drop-shadow(0 0 14px rgba(255,45,120,.18))}
 #flash{will-change:opacity}
+
+/* In-race exit: always reachable without opening pause. */
+.game-exit-btn{position:fixed;top:calc(12px + var(--hud-pad));left:calc(12px + var(--hud-pad));z-index:35;border:1px solid rgba(255,255,255,.22);background:rgba(8,11,18,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--bone);font:700 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em;text-transform:uppercase;padding:10px 12px;border-radius:10px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.game-exit-btn:active{transform:scale(.96);background:rgba(255,45,120,.22)}
+body.split .game-exit-btn{top:calc(10px + var(--hud-pad));left:calc(10px + var(--hud-pad))}
+body.touching .game-exit-btn{top:calc(12px + var(--hud-pad));left:12px;padding:9px 10px}
+
 </style>
 </head>
 <body>
@@ -305,7 +312,7 @@ summary::marker{color:var(--accent)}
   <p class="tagline">خمس حلبات من ٨ لـ ١١ كيلومتر، بمفترقات وجسور وأنفاق. ادخل المنحنى،
     اقفل الدريفت، اشحن، واطلع أسرع مما دخلت — ولو فضل هيكلك سليم.</p>
   <p class="eyebrow" id="buildStamp" style="opacity:.55;letter-spacing:.22em">
-    BUILD v21 TURBO · ٢٠ متسابق · ٥٥ سلاح · ٥ حلبات</p>
+    BUILD v28 HARD AI x2 · ٢٠ متسابق · ٥٥ سلاح · ٥ حلبات</p>
   <div class="grid" id="modeGrid"></div>
   <div class="row">
     <button class="btn sm" id="btnHelp">التحكم</button>
@@ -453,7 +460,8 @@ summary::marker{color:var(--accent)}
 
 <!-- ============================ HUD ============================ -->
 <div id="hud">
-  <div class="hud-tl">
+<button id="btnGameExit" class="game-exit-btn" type="button" aria-label="خروج من السباق">خروج</button>
+    <div class="hud-tl">
     <div id="pos">1<sup>st</sup></div>
     <div class="lapbox">
       <div class="lab">LAP</div><div id="lap">1/3</div>
@@ -694,6 +702,18 @@ const CONFIG = {
   },
   boost: { accelMul: 2.4, fovKick: 13, shake: 0.30, minSpeedFloor: 0.55 },
 
+  // ARCADE MOMENTS: skill rewards, rival pressure and short dynamic race events.
+  fun: {
+    perfectLandingMinAir: 0.42, perfectLandingMaxAir: 1.35,
+    perfectLandingMaxSlip: 9.5, perfectLandingSpeed: 10.5,
+    perfectLandingBoost: 1.22, perfectLandingTime: 0.48,
+    comboDecay: 2.8, comboMax: 12, comboBoostStep: 0.018,
+    rivalNear: 0.055, rivalSwapCooldown: 5.0,
+    eventInterval: 18, eventDuration: 7.0,
+    nitroPadBoost: 1.22, nitroJumpBoost: 1.16,
+    skillShotBonus: 1.16
+  },
+
   /* ---- DAMAGE: karts now break. A hit is no longer just a spin — it takes structure,
      and enough structure taken destroys the kart outright. Regeneration exists so a bad
      opening lap is a setback rather than a death spiral over a 9 km circuit. ---- */
@@ -778,11 +798,15 @@ const CONFIG = {
     // The fairness rule is untouched: `pace` never exceeds 1.0 at any tier. Nobody is
     // ever given a faster kart than yours.
     levels: {
-      easy:   { pace:0.90, lineErr:2.0, react:0.28, mistake:0.045, driftSkill:0.30, itemSkill:0.40, brakeConf:0.78, branchSkill:0.25, aggression:0.30 },
-      normal: { pace:0.94, lineErr:1.4, react:0.21, mistake:0.028, driftSkill:0.48, itemSkill:0.58, brakeConf:0.86, branchSkill:0.45, aggression:0.48 },
-      hard:   { pace:0.97, lineErr:0.9, react:0.15, mistake:0.016, driftSkill:0.66, itemSkill:0.74, brakeConf:0.92, branchSkill:0.65, aggression:0.66 },
-      expert: { pace:0.99, lineErr:0.6, react:0.10, mistake:0.007, driftSkill:0.84, itemSkill:0.88, brakeConf:0.97, branchSkill:0.85, aggression:0.84 },
-      apex:   { pace:1.00, lineErr:0.35,react:0.07, mistake:0.002, driftSkill:1.00, itemSkill:1.00, brakeConf:1.00, branchSkill:1.00, aggression:0.96 }
+      // HARDNESS x2: the old values were intentionally conservative. These tiers now
+      // compress toward optimal human pace, halve reaction/error penalties, and push
+      // racecraft/item usage much closer to a very strong real player. Speed is still
+      // capped at the player's physics limit: no rubber-band speed is granted.
+      easy:   { pace:0.94, lineErr:1.55, react:0.18, mistake:0.026, driftSkill:0.52, itemSkill:0.62, brakeConf:0.89, branchSkill:0.45, aggression:0.52 },
+      normal: { pace:0.97, lineErr:1.00, react:0.13, mistake:0.015, driftSkill:0.70, itemSkill:0.76, brakeConf:0.94, branchSkill:0.66, aggression:0.66 },
+      hard:   { pace:0.985,lineErr:0.52, react:0.075,mistake:0.008, driftSkill:0.86, itemSkill:0.91, brakeConf:0.98, branchSkill:0.88, aggression:0.86 },
+      expert: { pace:0.995,lineErr:0.30, react:0.050,mistake:0.0035,driftSkill:0.95, itemSkill:0.97, brakeConf:0.995,branchSkill:0.96, aggression:0.94 },
+      apex:   { pace:1.00, lineErr:0.16, react:0.035,mistake:0.001, driftSkill:1.00, itemSkill:1.00, brakeConf:1.00, branchSkill:1.00, aggression:1.00 }
     },
     slipBudget: 11.0,                 // m/s of slide the AI is willing to carry mid-corner
     lookMin: 9, lookSpeed: 0.62,      // lookahead metres = lookMin + speed*lookSpeed
@@ -3727,6 +3751,7 @@ class KartController {
 
     // boost
     this.boostTimer = 0; this.boostPower = 1; this.boostSource = '';
+    this.combo = 0; this.comboTimer = 0; this.lastSkillShot = 0; this.lastLandingPerfect = false;
 
     // status effects
     // status effects. The hex family (invert / nothrottle / heavy / blind) are the ones
@@ -3917,7 +3942,8 @@ class KartController {
 
     // boost pads are a surface, not an entity: drive over one and it fires
     if (sd.pad && this.grounded && this.boostSource !== 'pad_cd'){
-      this.applyBoost(1.34, 0.85, 'pad');
+      const storm = (typeof Game !== 'undefined' && Game.trackEvent?.kind === 'nitro') ? CONFIG.fun.nitroPadBoost : 1;
+      this.applyBoost(1.34 * storm, 0.85, 'pad');
       this.boostSource = 'pad_cd';
     } else if (!sd.pad && this.boostSource === 'pad_cd' && this.boostTimer <= 0){
       this.boostSource = '';
@@ -3941,7 +3967,21 @@ class KartController {
     if (canStick){
       if (!this.contact){
         const impact = Math.max(0, -this.velocity.y);
-        if (impact > 2.5) Events.emit('kart:land', { kart:this, impact, airTime:this.airTime });
+        const speedForLanding = Math.max(0, this.forwardSpeed);
+        const slipForLanding = Math.abs(this.lateralSpeed);
+        const perfect = this.airTime >= CONFIG.fun.perfectLandingMinAir
+          && this.airTime <= CONFIG.fun.perfectLandingMaxAir
+          && speedForLanding >= CONFIG.fun.perfectLandingSpeed
+          && slipForLanding <= CONFIG.fun.perfectLandingMaxSlip
+          && impact < 11;
+        this.lastLandingPerfect = !!perfect;
+        if (impact > 2.5 || perfect){
+          Events.emit('kart:land', { kart:this, impact, airTime:this.airTime, perfect });
+          if (perfect){
+            this.applyBoost(CONFIG.fun.perfectLandingBoost, CONFIG.fun.perfectLandingTime, 'perfect-landing');
+            Events.emit('kart:perfectLand', { kart:this, airTime:this.airTime, speed:speedForLanding });
+          }
+        }
       }
       this.contact = true; this.coyote = K.coyoteTime; this.airTime = 0;
       if (gap < 0) this.position.y = targetY;
@@ -4930,6 +4970,7 @@ class ItemSystem {
       u: racer.kart.progress, lat: racer.kart.surf.lateral,
       vlat: spread * 26, speed: CONFIG.kart.maxSpeed * (f.speed || 1.3),
       hits: 0, bounces: 0, rise: 0,
+      skillShot: !!(racer.kart && (racer.kart.drift !== 0 || racer.kart.boostTimer > 0 || racer.kart.lastLandingPerfect)),
       tick: (dt, all) => {
         if (e.wait > 0){ e.wait -= dt; if (e.wait <= 0) mesh.visible = true; return false; }
 
@@ -4959,8 +5000,14 @@ class ItemSystem {
           if (k === racer || k.finished || k.kart.fx.cloak > 0) continue;
           if (k.kart.position.distanceToSquared(mesh.position) > 4.2) continue;
           if (f.hex) this._applyHex(k.kart, f.hex, 3.0);
-          else if (k.kart.spinOut(1.2, CONFIG.damage.fromWeapon * (f.dmg || 1)))
-            f.rocketFx ? this._rocketImpact(mesh.position,def.color,!!f.heavyRocket) : this.fx.burst(mesh.position,24,def.color,8,.6,.7);
+          else {
+            const skillMul = e.skillShot ? CONFIG.fun.skillShotBonus : 1;
+            const hit = k.kart.spinOut(1.2, CONFIG.damage.fromWeapon * (f.dmg || 1) * skillMul);
+            if (hit){
+              if (e.skillShot) Events.emit('weapon:skillHit',{racer, target:k, pos:mesh.position.clone(), bonus:skillMul});
+              f.rocketFx ? this._rocketImpact(mesh.position,def.color,!!f.heavyRocket) : this.fx.burst(mesh.position,24,def.color,8,.6,.7);
+            }
+          }
           if (f.splitInto) this._split(racer, karts, f, def, e);
           if (!f.pierce || ++e.hits >= f.pierce) return true;
         }
@@ -5464,7 +5511,9 @@ class JumpSystem {
         const du=Math.abs(M.duWrap(k.progress,p.u)); if(du>.0058||Math.abs(k.surf.lateral-p.lat)>(k.surf.roadHalf||3)*.92)continue;
         const now=performance.now()/1000,last=p.last.get(r)||-99;if(now-last<.9)continue;p.last.set(r,now);
         k.velocity.addScaledVector(k.up,CONFIG.jumps.impulse+Math.min(5,k.forwardSpeed*.12));k.grounded=false;k.airLockTimer=Math.max(k.airLockTimer||0,.16);
-        k.applyBoost(CONFIG.jumps.boostMul,CONFIG.jumps.boostTime,'jump');Events.emit('kart:jump',{kart:k,racer:r,pad:p});this.fx?.burst(k.position,18,0x28e0d0,7,.45,.65,1.5);
+        k.applyBoost(CONFIG.jumps.boostMul,CONFIG.jumps.boostTime,'jump');const jumpBoost = (typeof Game !== 'undefined' && Game.trackEvent?.kind === 'air') ? CONFIG.fun.nitroJumpBoost : 1;
+      k.applyBoost(CONFIG.jumps.boostMul*jumpBoost,CONFIG.jumps.boostTime,'jump');
+      Events.emit('kart:jump',{kart:k,racer:r,pad:p});this.fx?.burst(k.position,18,0x28e0d0,7,.45,.65,1.5);
       }
     }
   }
@@ -6217,6 +6266,13 @@ const UI = {
     $('btnResume').onclick  = () => Game.resume();
     $('btnRestart').onclick = () => { Screens.hideAll(); Game.startRace(); };
     $('btnQuit').onclick    = () => Game.toMenu();
+    $('btnGameExit').onclick = () => {
+      if (Game.state === 'racing') Game.pause();
+      if (Game.state === 'paused') {
+        const ok = confirm('الخروج من السباق والعودة للقائمة؟');
+        if (ok) Game.toMenu();
+      }
+    };
   },
 
   buildDrivers(){
@@ -6786,6 +6842,13 @@ const HUD = {
       e.slot.classList.remove('roll','armed');
     }
 
+    // arcade moment badges
+    if (this.el.effects){
+      const combo = racer.kart.combo > 1 ? `COMBO ×${racer.kart.combo}` : '';
+      const event = Game.trackEvent?.kind ? (Game.trackEvent.kind==='nitro' ? 'NITRO STORM' : 'AIR RUSH') : '';
+      this.el.effects.innerHTML = [combo,event].filter(Boolean).map((x,i)=>`<span class="eff">${x}</span>`).join('');
+    }
+
     // ladder
     if (race.order){
       for (let i=0;i<race.order.length && i<this.rungs.length;i++){
@@ -6915,14 +6978,18 @@ const Game = {
     Events.on('kart:hop',   e => { if (e.kart===this.heroKart) sfx('hop'); });
     Events.on('kart:wall',  e => { if (e.kart===this.heroKart){ sfx('wall'); this.heroView?.chase.addShake(M.clamp(e.impact/18,0,1)*0.9); } });
     Events.on('kart:land',  e => { if (e.kart===this.heroKart){ sfx('land'); this.heroView?.chase.addShake(M.clamp(e.impact/26,0,1)*0.7); }
-      if (this.fx && e.impact > 4) this.fx.burst(e.kart.position, 8, 0xdddddd, 4, .35, .5); });
+      if (this.fx && e.impact > 4) this.fx.burst(e.kart.position, 8, 0xdddddd, 4, .35, .5);
+      if (e.kart===this.heroKart && e.perfect){ HUD.big('PERFECT LANDING','var(--cyan)'); HUD.flash('rgba(40,224,208,.28)',1); this.heroView?.chase.kickFov(7); this._combo('landing',1); }
+    });
+    Events.on('kart:perfectLand', e => { if(e.kart===this.heroKart) sfx('boost'); });
     Events.on('kart:bump',  e => { if (e.a===this.heroKart||e.b===this.heroKart) sfx('bump'); });
     Events.on('kart:jump',  e => { if(e.kart===this.heroKart){ sfx('hop'); this.heroView?.chase.addShake(.22); HUD.flash('rgba(40,224,208,.20)',1); HUD.toast('JUMP BOOST','var(--cyan)'); } });
     Events.on('weapon:hit', e => { if(!this.heroKart||!e.pos)return; const d=this.heroKart.position.distanceTo(e.pos); if(d<10){ this.heroView?.chase.addShake(M.clamp(1-d/10,0,1)*.55); HUD.flash('rgba(255,45,120,.18)',1); } });
+    Events.on('weapon:skillHit', e => { if(e.racer?.kart===this.heroKart){ HUD.big('SKILL SHOT','var(--magenta)'); HUD.flash('rgba(255,45,120,.25)',1); this._combo('skill',2); } });
     Events.on('drift:tier', e => { if (e.kart===this.heroKart) sfx('tier'+e.tier); });
     Events.on('drift:release', e => { if (e.kart===this.heroKart){ sfx('boost');
       this.heroView?.chase.kickFov(CONFIG.boost.fovKick); this.heroView?.chase.addShake(CONFIG.boost.shake);
-      HUD.flash('rgba(40,224,208,.25)', 1); } });
+      HUD.flash('rgba(40,224,208,.25)', 1); if(e.tier>=2) this._combo('drift',1); } });
     Events.on('kart:boost', e => { if (e.source==='pad' && e.kart===this.heroKart){ sfx('pad');
       this.heroView?.chase.kickFov(9); } });
     Events.on('kart:hit',   e => { if (this.fx) this.fx.burst(e.kart.position, 26, 0xffd070, 8, .7, .8);
@@ -7315,6 +7382,11 @@ const Game = {
     this.hero = humansList[0];
     this.heroKart = this.hero.kart;
     this.heroView = this.views[0];
+    this.comboState = { value:0, timer:0, best:0 };
+    this.rivalState = { id:null, lastSwap:0, lastAnnounce:0, lastRivalPos:0 };
+    const initialRival = this.racers.filter(r=>!r.human && r.kart).sort((a,b)=>Math.abs((a.position||99)-2)-Math.abs((b.position||99)-2))[0];
+    if (initialRival) this.rivalState.id = initialRival.id;
+    this.trackEvent = { kind:null, time:0, next:CONFIG.fun.eventInterval, index:0 };
 
     // --- items ---
     this.items = (mode === 'time') ? null : new ItemSystem(track, this.scene, this.fx);
@@ -7337,6 +7409,72 @@ const Game = {
     if (this.mode === 'time') HUD.toast('ضد الساعة — مافيش أسلحة', 'var(--cyan)');
   },
 
+
+  _combo(type, amount=1){
+    if (!this.heroKart || !this.comboState) return;
+    const C = this.comboState;
+    C.value = Math.min(CONFIG.fun.comboMax, C.value + amount);
+    C.timer = CONFIG.fun.comboDecay;
+    C.best = Math.max(C.best, C.value);
+    this.heroKart.combo = C.value; this.heroKart.comboTimer = C.timer;
+    if (C.value >= 2){
+      const boost = 1 + Math.min(.12, C.value * CONFIG.fun.comboBoostStep);
+      if (type !== 'landing') this.heroKart.applyBoost(boost, .18, 'combo');
+      HUD.toast(`COMBO ×${C.value}`, C.value >= 6 ? 'var(--magenta)' : 'var(--cyan)');
+    }
+  },
+
+  updateRivalAndEvents(dt){
+    if (!this.hero || !this.race || this.race.state !== 'racing') return;
+    if (this.comboState){
+      this.comboState.timer -= dt;
+      if (this.comboState.timer <= 0){
+        this.comboState.value = 0;
+        this.heroKart.combo = 0;
+        this.heroKart.comboTimer = 0;
+      } else this.heroKart.comboTimer = this.comboState.timer;
+    }
+    const R = this.rivalState;
+    if (R){
+      const current = this.racers.find(x=>x.id===R.id && !x.finished);
+      const gap = current ? Math.abs(M.duWrap(this.hero.totalProgress||this.hero.kart.progress, current.totalProgress||current.kart.progress)) : 1;
+      R.lastSwap -= dt;
+      if ((!current || gap > CONFIG.fun.rivalSwapCooldown/100 || R.lastSwap <= 0) && !current){
+        const candidates=this.racers.filter(x=>!x.human&&!x.finished&&x.kart);
+        const next=candidates.sort((a,b)=>Math.abs(a.position-this.hero.position)-Math.abs(b.position-this.hero.position))[0];
+        if(next){ R.id=next.id; R.lastSwap=CONFIG.fun.rivalSwapCooldown; HUD.toast(`RIVAL: ${next.name}`, 'var(--amber)'); }
+      }
+      if(current && gap < CONFIG.fun.rivalNear && R.lastAnnounce <= 0){
+        R.lastAnnounce = 3.5;
+        HUD.alert(current.name, 'RIVAL — قريب منك', 'var(--amber)');
+      }
+      if(current && R.lastRivalPos && current.position !== R.lastRivalPos){
+        if (current.position < this.hero.position && R.lastRivalPos >= this.hero.position){
+          HUD.big('RIVAL PASSED','var(--amber)');
+        } else if (current.position >= this.hero.position && R.lastRivalPos < this.hero.position){
+          HUD.big('RIVAL OVERTAKEN','var(--cyan)');
+          this._combo('rival',1);
+        }
+        R.lastRivalPos = current.position;
+      } else if (current && !R.lastRivalPos) R.lastRivalPos = current.position;
+      R.lastAnnounce = Math.max(0, R.lastAnnounce-dt);
+    }
+    const E=this.trackEvent;
+    if (!E || this.mode==='time' || this.mode==='battle') return;
+    E.time += dt; E.next -= dt;
+    if (!E.kind && this.race.time >= E.next){
+      E.kind = (E.index++ % 2 === 0) ? 'nitro' : 'air';
+      E.time = 0;
+      E.next = CONFIG.fun.eventInterval;
+      const label = E.kind==='nitro' ? 'NITRO STORM' : 'AIR RUSH';
+      HUD.big(label, E.kind==='nitro' ? 'var(--cyan)' : 'var(--magenta)');
+      HUD.alert('TRACK EVENT', E.kind==='nitro' ? 'Boost pads أقوى' : 'القفزات تمنح Boost إضافي', E.kind==='nitro' ? 'var(--cyan)' : 'var(--magenta)');
+    } else if (E.kind && E.time >= CONFIG.fun.eventDuration){
+      E.kind = null; E.time = 0;
+      HUD.toast('TRACK EVENT انتهى', 'var(--dim)');
+    }
+  },
+
   pause(){
     if (this.state !== 'racing') return;
     this.state = 'paused'; Input.enabled = false;
@@ -7354,6 +7492,7 @@ const Game = {
     document.body.classList.remove('split');
     this.racers = []; this.views = []; this.race = null; this.gp = null;
     this.heroKart = null; this.heroView = null;
+    this.comboState = null; this.rivalState = null; this.trackEvent = null;
     this.previewTrack(Selection.trackId);
     Screens.stack = ['scTitle']; Screens.show('scTitle', false);
   },
@@ -7530,6 +7669,7 @@ const Game = {
 
     // ---------- systems ----------
     this.race.update(dt);
+    this.updateRivalAndEvents(dt);
     if (this.jumps) this.jumps.update(dt,this.racers);
     if (this.items) this.items.update(dt, this.racers);
     if (this.mode === 'battle') this.updateBattle(dt);
